@@ -21,6 +21,14 @@ namespace Working.Models.BO.Domain
             return MemberwiseClone();
         }
 
+        public void FillByNewTask(NewTaskToWork newTask)
+        {
+            this.HandlerId = newTask.HandlerId;
+            //this.DateOfCreated = newTask.DateOfCreated;
+            this.StartIn = newTask.StartIn;
+            this.Recycle = newTask.Recycle;
+        }
+
         public TaskToWork Clone()
         {
             return (TaskToWork)Clone();

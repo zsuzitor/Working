@@ -2,8 +2,8 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
+using Working.Models.BL.Handlers.Interfaces;
 using Working.Models.BL.Repositories.Interfaces;
 using Working.Models.BL.Services.Interfaces;
 using Working.Models.BO;
@@ -59,14 +59,18 @@ namespace Working.Models.BL.Services
             return _workerService;
         }
 
-        public async Task AddTaskAsync(TaskToWork tsk)
+        public async Task AddTaskAsync(NewTaskToWork newTask)
         {
+            var tsk = new TaskToWork();
+            tsk.FillByNewTask(newTask);
             tsk.DateOfCreated = DateTime.Now;
-            tsk.DateOfEnd = null;
-            tsk.ErrorText = null;
             tsk.Status = TaskToWorkStatus.NotHandling;
-            tsk.Id = 0;
-            await _workerRepository.AddAsync(tsk);
+            await AddTaskAsync(tsk);
+        }
+
+        private async Task AddTaskAsync(TaskToWork newTask)
+        {
+            await _workerRepository.AddAsync(newTask);
         }
 
 
@@ -77,7 +81,7 @@ namespace Working.Models.BL.Services
                 return;
             }
 
-            var tasksToRun = _workerRepository.GetNotRunnigTasks();
+            var tasksToRun = _workerRepository.GetNotRunnigTasks();//TODO думаю лучше сразу получать то что можно запустить, получитс так? может хранить дату и при добавлении ее высчитывать?
             if (tasksToRun.Count == 0)
             {
                 return;
@@ -99,32 +103,32 @@ namespace Working.Models.BL.Services
                     {
                         if (task.NeedHandleNow())
                         {
-                            if(!_processTask.TryAdd(task.Id, task))
+                            if (!_processTask.TryAdd(task.Id, task))
                             {
                                 continue;
                             }
 
                             var taskToSend = task.Clone();
-                            await handler.Handle(taskToSend);
-                            
+                            await handler.Handle(taskToSend);//TODO надо ли ждать?
+
                             task.Status = taskToSend.Status;
                             task.DateOfEnd = DateTime.Now;
                             task.ErrorText = taskToSend.ErrorText;
                         }
                     }
-                    catch(Exception e)
+                    catch (Exception e)
                     {
                         task.ErrorText = e.Message;
                         task.Status = TaskToWorkStatus.Error;
                     }
 
                     await _workerRepository.UpdateAsync(task);
-                    _processTask.TryRemove(task.Id,out _);
+                    _processTask.TryRemove(task.Id, out _);
 
                     if (task.Recycle)
                     {
                         var newTsk = CloneForNewByOld(task);
-                        await _workerRepository.AddAsync(newTsk);
+                        await AddTaskAsync(newTsk);
                     }
 
                 }
@@ -139,7 +143,7 @@ namespace Working.Models.BL.Services
         /// <returns></returns>
         private TaskToWork CloneForNewByOld(TaskToWork tsk)
         {
-            var newTsk =tsk.Clone();
+            var newTsk = tsk.Clone();
             newTsk.Id = 0;
             newTsk.DateOfCreated = DateTime.Now;
             newTsk.DateOfEnd = null;
@@ -147,6 +151,8 @@ namespace Working.Models.BL.Services
             newTsk.Status = TaskToWorkStatus.NotHandling;
             return newTsk;
         }
+
+
     }
 
     //public class TaskToWorkInProgress
@@ -154,9 +160,5 @@ namespace Working.Models.BL.Services
 
     //}
 
-    public interface ITaskWorkHandler
-    {
-        string GetHandlerId();
-        Task<bool> Handle(TaskToWork tsk);
-    }
+
 }
